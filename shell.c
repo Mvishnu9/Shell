@@ -15,14 +15,26 @@ char *GetInput()
 	return read;
 }
 
-char TokenizeInp(char *Inp)
+char **TokenizeInp(char *Inp)
 {
-	char *token;
+	char *token, **TokArr;
+	int TokInd = 0;
+	TokArr = malloc(32 * sizeof(char*));
+
 	token = strtok(Inp, " ");
-	printf("%s\n",token);
+	TokArr[TokInd++] = token;
 	while((token = strtok(NULL, " ")) != NULL)
-		printf("%s\n", token);
-	return 'c';
+	{
+		TokArr[TokInd++] = token;
+	}
+	TokArr[TokInd++] = NULL;
+	return TokArr;
+}
+
+int Execute(char **Token)
+{
+	return 0;
+
 }
 
 int main_loop()
@@ -35,14 +47,17 @@ int main_loop()
 	int breaker = 1;
 	do
 	{
-		char *Inp, Tok;
+		int ret;
+		char *Inp, **Tok;
 		char CurrAbsPath[256], CurrPath[256];
 		getcwd(CurrAbsPath, 256);
 		printf("<%s@%s: %s> ",name, hname, CurrAbsPath);
 		Inp = GetInput();
 		Tok = TokenizeInp(Inp);
-		printf("\n%s\n", Inp);
+		ret = Execute(Tok);
+		
 		breaker = 0;
+		free(Tok);
 	}while(breaker == 1);
 	
 	return 0;
