@@ -75,6 +75,12 @@ int HandleBuiltIn(int Ind, char **Token)
 	{
 		return 0;
 	}
+	else if(strcmp(BuiltIn[Ind], "pwd") == 0)
+	{
+		char CurrPath[256];
+		getcwd(CurrPath,256);
+		printf("%s\n",CurrPath);
+	}
 	return 0;
 }
 
