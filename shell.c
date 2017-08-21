@@ -7,11 +7,13 @@
 #include <sys/types.h>
 #include <pwd.h>
 
+char *BuiltIn[] = { "cd", "pwd", "echo", "exit"};
+
 char *GetInput()
 {
 	char *read = NULL;
 	ssize_t siz = 0;
-	getline(&read, &siz, stdin);
+	getline(&read, &siz,stdin);
 	return read;
 }
 
@@ -28,11 +30,47 @@ char **TokenizeInp(char *Inp)
 		TokArr[TokInd++] = token;
 	}
 	TokArr[TokInd++] = NULL;
+	int len = strlen(TokArr[TokInd-2]);
+	TokArr[TokInd-2][len-1] = '\0';
 	return TokArr;
+}
+
+int HandleBuiltIn(int Ind, char **Token)
+{
+//	printf("In builtin\n");
+	if(strcmp(BuiltIn[Ind],"cd") == 0)
+	{
+		if(chdir(Token[1]) != 0)
+			perror("Error");
+	}
+	else if(strcmp(BuiltIn[Ind],"exit") == 0)
+	{
+//		printf("In exit part");
+		return -1;
+	}
+	else if(strcmp(BuiltIn[Ind], "echo") == 0)
+	{
+		return 0;
+	}
+	return 0;
 }
 
 int Execute(char **Token)
 {
+	int i, BuiltInCount = sizeof(BuiltIn)/sizeof(char*);
+	for(i=0; i<BuiltInCount; i++)
+	{
+//		printf("%s\n", BuiltIn[i]);
+//		printf("%s\n", Token[0]);
+		if(strcmp(BuiltIn[i],Token[0]) == 0)
+		{
+//			printf("in Builtin part\n");
+			int ret = HandleBuiltIn(i, Token);
+			if(ret == -1)
+				return ret;
+		}
+	}
+
 	return 0;
 
 }
@@ -44,10 +82,9 @@ int main_loop()
 	char *name = pass->pw_name;
 	char hname[32];
 	gethostname(hname, 32);
-	int breaker = 1;
+	int ret = 1;
 	do
 	{
-		int ret;
 		char *Inp, **Tok;
 		char CurrAbsPath[256], CurrPath[256];
 		getcwd(CurrAbsPath, 256);
@@ -56,9 +93,8 @@ int main_loop()
 		Tok = TokenizeInp(Inp);
 		ret = Execute(Tok);
 		
-		breaker = 0;
 		free(Tok);
-	}while(breaker == 1);
+	}while(ret != -1);
 	
 	return 0;
 }
