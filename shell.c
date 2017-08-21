@@ -40,7 +40,30 @@ int HandleBuiltIn(int Ind, char **Token)
 //	printf("In builtin\n");
 	if(strcmp(BuiltIn[Ind],"cd") == 0)
 	{
-		if(chdir(Token[1]) != 0)
+		char dest[256], Fin[256], *first;
+		strcpy(Fin, Token[1]);
+		strcpy(dest, Token[1]);
+		first = strtok(dest, "/");
+		if(strcmp(first, "~") == 0)
+		{
+			struct passwd *pw = getpwuid(getuid());
+			char *homedir= pw->pw_dir, temp[256];
+			strcpy(temp, homedir);
+			int TempL = strlen(temp);
+			temp[TempL] = '/';
+			temp[TempL+1] = '\0';
+			while((first = strtok(NULL, "/")) != NULL)
+			{
+				strcat(temp,first);
+				TempL = strlen(temp);
+				temp[TempL] = '/';
+				temp[TempL+1] = '\0';
+			}
+//			strcat(temp, dest);
+//			printf("%s\n",temp);
+			strcpy(Fin,temp);
+		}
+		if(chdir(Fin) != 0)
 			perror("Error");
 	}
 	else if(strcmp(BuiltIn[Ind],"exit") == 0)
