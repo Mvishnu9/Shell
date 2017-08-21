@@ -73,6 +73,15 @@ int HandleBuiltIn(int Ind, char **Token)
 	}
 	else if(strcmp(BuiltIn[Ind], "echo") == 0)
 	{
+		int i=1;
+		char out[1024]="";
+		while(Token[i] != NULL)	
+		{
+			strcat(out,Token[i]);
+			strcat(out," ");
+			i++;
+		}
+		printf("%s\n", out);
 		return 0;
 	}
 	else if(strcmp(BuiltIn[Ind], "pwd") == 0)
