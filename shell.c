@@ -5,7 +5,10 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <pwd.h>
+#include <dirent.h>
+
 
 char *BuiltIn[] = { "cd", "pwd", "echo", "exit"};
 
@@ -81,7 +84,8 @@ int HandleBuiltIn(int Ind, char **Token)
 			strcat(out," ");
 			i++;
 		}
-		printf("%s\n", out);
+		strcat(out,"\n");
+		write(STDOUT_FILENO, &out, strlen(out));
 		return 0;
 	}
 	else if(strcmp(BuiltIn[Ind], "pwd") == 0)
@@ -91,6 +95,68 @@ int HandleBuiltIn(int Ind, char **Token)
 		printf("%s\n",CurrPath);
 	}
 	return 0;
+}
+
+int Handle_ls(char **Token)
+{
+	char path[512]="";
+	char ArgPath[512]= "";
+	struct dirent *FileName;
+	DIR *CurrDir;
+	getcwd(path, 512);
+	int ct=0, i, flags = 0; 			// Flags-> stores Cumulative flag variable
+	while(Token[ct] != NULL)
+		ct++;
+	for(i=1; i<ct; i++)
+	{
+		if(Token[i][0] == '-')
+		{
+			int len = strlen(Token[i]);
+			int j = 0;
+			for(j=1; j<len; j++)
+			{
+				if(Token[i][j] == 'l')
+					flags += 10;
+				else if(Token[i][j] == 'a')
+					flags += 1;
+			}
+		}
+		else
+		{
+			strcat(path,"/");
+			if(Token[i][0] != '/')
+				strcat(path, Token[i]);
+			else
+				strcpy(path, Token[i]);
+		}
+	}
+
+	CurrDir = opendir(path);
+	while((FileName = readdir(CurrDir)) != NULL)
+	{
+
+		// Change the following code to work with flags variable
+
+		char *buf;
+		buf = FileName->d_name;
+		if(Token[1] != NULL)
+		{
+			if(strcmp(Token[1],"-a") == 0)
+			{
+				printf("%s\n", buf);
+			}
+		}
+		else
+		{
+			if(buf[0] != '.')
+				printf("%s\n", buf);
+		}
+
+		// Upto this point
+	}
+	closedir(CurrDir);
+	return 0;
+
 }
 
 int Execute(char **Token)
@@ -107,10 +173,13 @@ int Execute(char **Token)
 			if(ret == -1)
 				return ret;
 		}
+
 	}
-
+	if(strcmp(Token[0],"ls") == 0)
+	{
+		int ret = Handle_ls(Token);
+	}
 	return 0;
-
 }
 
 int main_loop()
@@ -133,13 +202,11 @@ int main_loop()
 		
 		free(Tok);
 	}while(ret != -1);
-	
 	return 0;
 }
 
 int main(int argc, char *argv[])
 {
 	main_loop();
-
 	exit(0);
 }
