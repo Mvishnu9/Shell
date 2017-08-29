@@ -1,4 +1,4 @@
-#include <syscall.h>
+//#include <syscall.h>
 #include <fcntl.h>
 #include <string.h>
 #include <stdio.h>
@@ -7,8 +7,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <pwd.h>
+#include <grp.h>
 #include <dirent.h>
-
+#include <time.h>
 
 char *BuiltIn[] = { "cd", "pwd", "echo", "exit"};
 
@@ -16,8 +17,14 @@ char *GetInput()
 {
 	char *read = NULL;
 	ssize_t siz = 0;
-	getline(&read, &siz,stdin);
+	getline(&read, &siz, stdin);
 	return read;
+}
+
+char* formatdate(char* str, time_t val)
+{
+        strftime(str, 36, "%d.%m.%Y %H:%M:%S", localtime(&val));
+        return str;
 }
 
 char **TokenizeInp(char *Inp)
@@ -36,6 +43,35 @@ char **TokenizeInp(char *Inp)
 	int len = strlen(TokArr[TokInd-2]);
 	TokArr[TokInd-2][len-1] = '\0';
 	return TokArr;
+}
+
+char *GetPermissionString(struct stat perm)
+{
+
+	static char PermissionString[11] = "----------";
+
+	if(S_ISDIR(perm.st_mode))
+		PermissionString[0] = 'd';
+	 if(perm.st_mode & S_IRUSR)
+	 	PermissionString[1] = 'r';
+	 if(perm.st_mode & S_IWUSR)
+	 	PermissionString[2] = 'w';
+	 if(perm.st_mode & S_IXUSR)
+	 	PermissionString[3] = 'x';
+	 if(perm.st_mode & S_IRGRP)
+	 	PermissionString[4] = 'r';
+	 if(perm.st_mode & S_IWGRP)
+	 	PermissionString[5] = 'w';
+	 if(perm.st_mode & S_IXGRP)
+	 	PermissionString[6] = 'x';
+	 if(perm.st_mode & S_IROTH)
+	 	PermissionString[7] = 'r';
+	 if(perm.st_mode & S_IWOTH)
+	 	PermissionString[8] = 'w';
+	 if(perm.st_mode & S_IXOTH)
+	    PermissionString[9] = 'x';
+	return PermissionString;
+
 }
 
 int HandleBuiltIn(int Ind, char **Token)
@@ -125,7 +161,18 @@ int Handle_ls(char **Token)
 		{
 			strcat(path,"/");
 			if(Token[i][0] != '/')
-				strcat(path, Token[i]);
+			{
+				if(Token[i][0] != '~')
+					strcat(path, Token[i]);
+				else
+				{
+					struct passwd *temp = getpwuid(getuid());
+					const char *homedir = temp->pw_dir;
+					strcpy(path, homedir);
+					if(Token[i][1]!= '\0')
+						strcat(path,Token[i]+1);
+				}
+			}
 			else
 				strcpy(path, Token[i]);
 		}
@@ -134,25 +181,58 @@ int Handle_ls(char **Token)
 	CurrDir = opendir(path);
 	while((FileName = readdir(CurrDir)) != NULL)
 	{
-
-		// Change the following code to work with flags variable
-
 		char *buf;
 		buf = FileName->d_name;
-		if(Token[1] != NULL)
+
+		if(flags%10 == 0)
 		{
-			if(strcmp(Token[1],"-a") == 0)
+			if(buf[0] != '.')
 			{
-				printf("%s\n", buf);
+				if(flags < 10)
+					printf("%s\n", buf);
+				else
+				{
+					struct stat file_stat;
+					char filePath[512] = "";
+					strcpy(filePath, path);
+					strcat(filePath, "/");
+					strcat(filePath, buf);
+					if(stat(filePath, &file_stat) == 0)
+					{
+						struct passwd *pwuser = getpwuid(file_stat.st_uid);
+						struct group *gruser = getgrgid(file_stat.st_gid);
+						printf("%s  %d %s\t%s\t",GetPermissionString(file_stat), file_stat.st_nlink, pwuser->pw_name, gruser->gr_name);
+						char date[36];
+						char temp[36];
+						strcpy(temp, formatdate(date, file_stat.st_mtime));
+						printf("%lld\t%s\t%s\n", file_stat.st_size, temp, buf);
+					}
+				}
 			}
 		}
 		else
 		{
-			if(buf[0] != '.')
-				printf("%s\n", buf);
+			if(flags < 10)
+					printf("%s\n", buf);
+			else
+			{
+				struct stat file_stat;
+				char filePath[512] = "";
+				strcpy(filePath, path);
+				strcat(filePath, "/");
+				strcat(filePath, buf);
+				if(stat(filePath, &file_stat) == 0)
+				{
+					struct passwd *pwuser = getpwuid(file_stat.st_uid);
+					struct group *gruser = getgrgid(file_stat.st_gid);
+					printf("%s  %d %s\t%s\t",GetPermissionString(file_stat), file_stat.st_nlink, pwuser->pw_name, gruser->gr_name);
+					char date[36];
+					char temp[36];
+					strcpy(temp, formatdate(date, file_stat.st_mtime));
+					printf("%lld\t%s\t%s\n", file_stat.st_size, temp, buf);
+				}
+			}
 		}
-
-		// Upto this point
 	}
 	closedir(CurrDir);
 	return 0;
