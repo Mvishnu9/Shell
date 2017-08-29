@@ -21,7 +21,7 @@ char *GetInput()
 	return read;
 }
 
-char* formatdate(char* str, time_t val)
+char *formatdate(char* str, time_t val)
 {
         strftime(str, 36, "%d.%m.%Y %H:%M:%S", localtime(&val));
         return str;
@@ -201,7 +201,7 @@ int Handle_ls(char **Token)
 					{
 						struct passwd *pwuser = getpwuid(file_stat.st_uid);
 						struct group *gruser = getgrgid(file_stat.st_gid);
-						printf("%s  %d %s\t%s\t",GetPermissionString(file_stat), file_stat.st_nlink, pwuser->pw_name, gruser->gr_name);
+						printf("%s\t%d %s\t%s\t",GetPermissionString(file_stat), file_stat.st_nlink, pwuser->pw_name, gruser->gr_name);
 						char date[36];
 						char temp[36];
 						strcpy(temp, formatdate(date, file_stat.st_mtime));
@@ -239,6 +239,15 @@ int Handle_ls(char **Token)
 
 }
 
+int Handle_pinfo()
+{
+	int pid = getpid();
+	printf("PID -- %d\n", pid);
+	return 0;
+
+}
+
+
 int Execute(char **Token)
 {
 	int i, BuiltInCount = sizeof(BuiltIn)/sizeof(char*);
@@ -258,6 +267,10 @@ int Execute(char **Token)
 	if(strcmp(Token[0],"ls") == 0)
 	{
 		int ret = Handle_ls(Token);
+	}
+	else if(strcmp(Token[0],"pinfo") == 0)
+	{
+		Handle_pinfo();
 	}
 	return 0;
 }
