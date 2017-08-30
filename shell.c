@@ -1,4 +1,3 @@
-//#include <syscall.h>
 #include <fcntl.h>
 #include <string.h>
 #include <stdio.h>
@@ -11,15 +10,16 @@
 #include <dirent.h>
 #include <time.h>
 #include <math.h>
+#include <sys/wait.h>
 
-#define RESET		0
-#define BRIGHT 		1
-#define RED			1
-#define GREEN		2
-#define YELLOW		3
-#define BLUE		4
-#define MAGENTA		5
-#define	WHITE		7
+#define RESET	0
+#define BRIGHT 	1
+#define RED	 	1
+#define GREEN	2
+#define YELLOW	3
+#define BLUE	4
+#define MAGENTA	5
+#define	WHITE	7
 
 char *BuiltIn[] = { "cd", "pwd", "echo", "exit"};
 
@@ -59,7 +59,7 @@ char *GetPermissionString(struct stat perm)
 {	
 	static char PermissionString[11];
 	strcpy(PermissionString, "----------");
-	// static char PermissionString[11];
+
 	if(S_ISDIR(perm.st_mode))
 		PermissionString[0] = 'd';
 	 if(perm.st_mode & S_IRUSR)
@@ -86,7 +86,6 @@ char *GetPermissionString(struct stat perm)
 
 int HandleBuiltIn(int Ind, char **Token)
 {
-//	printf("In builtin\n");
 	if(strcmp(BuiltIn[Ind],"cd") == 0)
 	{
 		char dest[256], Fin[256], *first;
@@ -108,8 +107,6 @@ int HandleBuiltIn(int Ind, char **Token)
 				temp[TempL] = '/';
 				temp[TempL+1] = '\0';
 			}
-//			strcat(temp, dest);
-//			printf("%s\n",temp);
 			strcpy(Fin,temp);
 		}
 		if(chdir(Fin) != 0)
@@ -117,7 +114,6 @@ int HandleBuiltIn(int Ind, char **Token)
 	}
 	else if(strcmp(BuiltIn[Ind],"exit") == 0)
 	{
-//		printf("In exit part");
 		return -1;
 	}
 	else if(strcmp(BuiltIn[Ind], "echo") == 0)
@@ -341,26 +337,69 @@ int Handle_pinfo(char **Token)
 
 }
 
+int systemcommand(char **Token)
+{
+	int ct = 0, status;
+	pid_t pid, wpid;
+	while(Token[ct] != NULL)
+		ct++;
+	if(strcmp(Token[ct-1],"&") != 0)
+	{
+		pid = fork();
+		if(pid == 0)
+		{
+			if(execvp(Token[0], Token) == -1)
+			{
+				perror("EXECVP ERROR");
+			}
+		}
+		else if (pid < 0)
+		{
+			perror("FORK ERROR");
+		}
+		else
+		{
+			do 
+			{
+	      		wpid = waitpid(pid, &status, WUNTRACED);
+	    	}while (!WIFEXITED(status) && !WIFSIGNALED(status));
+		}
+	}
+	else
+	{
+
+	}
+	return 0;
+}
 
 int Execute(char **Token)
 {
 	int i, BuiltInCount = sizeof(BuiltIn)/sizeof(char*);
+	int flag = 0;
 	for(i=0; i<BuiltInCount; i++)
 	{
 		if(strcmp(BuiltIn[i],Token[0]) == 0)
 		{
+			flag = 1;
 			int ret = HandleBuiltIn(i, Token);
 			if(ret == -1)
 				return ret;
 		}
 	}
-	if(strcmp(Token[0],"ls") == 0)
+	if(flag == 0)
 	{
-		int ret = Handle_ls(Token);
-	}
-	else if(strcmp(Token[0],"pinfo") == 0)
-	{
-		Handle_pinfo(Token);
+		if(strcmp(Token[0],"ls") == 0)
+		{
+			int ret = Handle_ls(Token);
+		}
+		else if(strcmp(Token[0],"pinfo") == 0)
+		{
+			Handle_pinfo(Token);
+		}
+		else
+		{
+			systemcommand(Token);
+		}
 	}
 	return 0;
 }
