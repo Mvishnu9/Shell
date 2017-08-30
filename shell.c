@@ -10,6 +10,7 @@
 #include <grp.h>
 #include <dirent.h>
 #include <time.h>
+#include <math.h>
 
 char *BuiltIn[] = { "cd", "pwd", "echo", "exit"};
 
@@ -23,8 +24,8 @@ char *GetInput()
 
 char *formatdate(char* str, time_t val)
 {
-        strftime(str, 36, "%d.%m.%Y %H:%M:%S", localtime(&val));
-        return str;
+    strftime(str, 36, "%d.%m.%Y %H:%M:%S", localtime(&val));
+    return str;
 }
 
 char **TokenizeInp(char *Inp)
@@ -46,10 +47,10 @@ char **TokenizeInp(char *Inp)
 }
 
 char *GetPermissionString(struct stat perm)
-{
-
-	static char PermissionString[11] = "----------";
-
+{	
+	static char PermissionString[11];
+	strcpy(PermissionString, "----------");
+	// static char PermissionString[11];
 	if(S_ISDIR(perm.st_mode))
 		PermissionString[0] = 'd';
 	 if(perm.st_mode & S_IRUSR)
@@ -203,9 +204,10 @@ int Handle_ls(char **Token)
 						struct group *gruser = getgrgid(file_stat.st_gid);
 						printf("%s\t%d %s\t%s\t",GetPermissionString(file_stat), file_stat.st_nlink, pwuser->pw_name, gruser->gr_name);
 						char date[36];
+
 						char temp[36];
 						strcpy(temp, formatdate(date, file_stat.st_mtime));
-						printf("%lld\t%s\t%s\n", file_stat.st_size, temp, buf);
+						printf("%ld\t%s\t%s\n", file_stat.st_size, temp, buf);
 					}
 				}
 			}
@@ -225,11 +227,11 @@ int Handle_ls(char **Token)
 				{
 					struct passwd *pwuser = getpwuid(file_stat.st_uid);
 					struct group *gruser = getgrgid(file_stat.st_gid);
-					printf("%s  %d %s\t%s\t",GetPermissionString(file_stat), file_stat.st_nlink, pwuser->pw_name, gruser->gr_name);
+					printf("%s\t%d %s\t%s\t",GetPermissionString(file_stat), file_stat.st_nlink, pwuser->pw_name, gruser->gr_name);
 					char date[36];
 					char temp[36];
 					strcpy(temp, formatdate(date, file_stat.st_mtime));
-					printf("%lld\t%s\t%s\n", file_stat.st_size, temp, buf);
+					printf("%ld\t%s\t%s\n", file_stat.st_size, temp, buf);
 				}
 			}
 		}
@@ -239,10 +241,93 @@ int Handle_ls(char **Token)
 
 }
 
-int Handle_pinfo()
+char *ReadFileLine(char *Filename, char *search)
 {
+	static char out[128];
+	FILE * fd;
+	char * line = NULL;
+	size_t len = 0;
+	ssize_t read;
+	fd = fopen(Filename, "r");
+	if (fd == NULL)
+		perror("Error");
+	while((read = getline(&line, &len, fd)) != -1)
+	{
+		if(strstr(line, search))
+		{
+			strcpy(out, line);
+			break;
+		}
+
+	}
+	fclose(fd);
+	if(line)
+		free(line);
+	return out;
+}
+
+char *Readsym(char *filename)
+{
+	static char out[128];
+	memset(out, 0, sizeof(out));
+
+	if(readlink(filename, out, sizeof(out) - 1) < 0)
+	{
+		perror("Error");
+	}
+	return out;
+}
+
+int Handle_pinfo(char **Token)
+{
+	int ct = 0;
 	int pid = getpid();
-	printf("PID -- %d\n", pid);
+	char Proc_statF[512], Proc_exe[512], Proc_Dir[512], pid_string[16], state[128], exe_path[256], VmSize[128];
+	sprintf(pid_string, "%d", pid);
+
+	while(Token[ct] != NULL)
+		ct++;
+
+	if(ct == 2)
+	{
+		char temp[512];
+
+		strcpy(temp, "/proc/");	
+		strcat(temp, Token[1]);
+		strcat(temp, "/");
+		DIR *dir = opendir(temp);
+		if (dir)
+		{	
+			strcpy(pid_string, Token[1]);
+			closedir(dir);
+		}
+		else
+		{
+			perror("Process Doesnt exist");
+			return -1;
+		}
+
+	}
+
+	int size = (int)((ceil(log10(pid))+1)*sizeof(char));
+
+	strcpy(Proc_Dir, "/proc/");	
+	strcat(Proc_Dir, pid_string);
+	strcat(Proc_Dir, "/");
+
+	strcpy(Proc_statF, Proc_Dir);
+	strcat(Proc_statF, "status");
+	strcpy(state, ReadFileLine(Proc_statF, "State"));
+	strcpy(VmSize, ReadFileLine(Proc_statF, "VmSize"));
+
+	strcpy(Proc_exe, Proc_Dir);
+	strcat(Proc_exe, "exe");
+	strcpy(exe_path, Readsym(Proc_exe));
+
+	printf("PID -- %s\n", pid_string);
+	printf("%s", state);
+	printf("%s", VmSize);
+	printf("Executable path -- %s\n", exe_path);
 	return 0;
 
 }
@@ -253,16 +338,12 @@ int Execute(char **Token)
 	int i, BuiltInCount = sizeof(BuiltIn)/sizeof(char*);
 	for(i=0; i<BuiltInCount; i++)
 	{
-//		printf("%s\n", BuiltIn[i]);
-//		printf("%s\n", Token[0]);
 		if(strcmp(BuiltIn[i],Token[0]) == 0)
 		{
-//			printf("in Builtin part\n");
 			int ret = HandleBuiltIn(i, Token);
 			if(ret == -1)
 				return ret;
 		}
-
 	}
 	if(strcmp(Token[0],"ls") == 0)
 	{
@@ -270,7 +351,7 @@ int Execute(char **Token)
 	}
 	else if(strcmp(Token[0],"pinfo") == 0)
 	{
-		Handle_pinfo();
+		Handle_pinfo(Token);
 	}
 	return 0;
 }
