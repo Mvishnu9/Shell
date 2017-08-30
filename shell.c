@@ -12,6 +12,15 @@
 #include <time.h>
 #include <math.h>
 
+#define RESET		0
+#define BRIGHT 		1
+#define RED			1
+#define GREEN		2
+#define YELLOW		3
+#define BLUE		4
+#define MAGENTA		5
+#define	WHITE		7
+
 char *BuiltIn[] = { "cd", "pwd", "echo", "exit"};
 
 char *GetInput()
@@ -356,6 +365,13 @@ int Execute(char **Token)
 	return 0;
 }
 
+void textcolor(int attr, int fg)
+{	char command[13];
+
+	sprintf(command, "%c[%d;%d;%dm", 0x1B, attr, fg + 30, 40);
+	printf("%s", command);
+}
+
 int main_loop()
 {
 	struct passwd *pass;
@@ -369,7 +385,13 @@ int main_loop()
 		char *Inp, **Tok;
 		char CurrAbsPath[256], CurrPath[256];
 		getcwd(CurrAbsPath, 256);
-		printf("<%s@%s: %s> ",name, hname, CurrAbsPath);
+		printf("<");
+		textcolor(BRIGHT, RED);
+		printf("%s@%s:",name, hname);
+		textcolor(BRIGHT, YELLOW);
+		printf("%s" , CurrAbsPath);
+		textcolor(RESET, WHITE);
+		printf("> ");
 		Inp = GetInput();
 		Tok = TokenizeInp(Inp);
 		ret = Execute(Tok);
