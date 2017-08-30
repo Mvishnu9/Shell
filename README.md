@@ -1,10 +1,19 @@
 # Shell
-A Basic implementation of a Linux shell.
+## A Basic implementation of a Linux shell.
 
-Supports some bare minimum features such as the following shell builtins -
- >echo
- >pwd
- >cd
- >exit
- 
-Support for ls command with -a -l -la flags.
+#### Supports the following shell builtins -
+ ```
+ echo [text]
+ pwd
+ cd [path]
+ exit
+ ```
+#### Support for ls command with -a -l flags.
+```
+ls [flags] [path]
+```
+#### User defined command _pinfo_ 
+```
+pinfo [PID]
+```
+Defaults to Process info of current process without user defined PID.
