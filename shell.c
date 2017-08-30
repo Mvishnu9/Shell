@@ -45,6 +45,7 @@ char **TokenizeInp(char *Inp)
 
 	token = strtok(Inp, " ");
 	TokArr[TokInd++] = token;
+
 	while((token = strtok(NULL, " ")) != NULL)
 	{
 		TokArr[TokInd++] = token;
@@ -119,7 +120,7 @@ int HandleBuiltIn(int Ind, char **Token)
 	else if(strcmp(BuiltIn[Ind], "echo") == 0)
 	{
 		int i=1;
-		char out[1024]="";
+		char out[2048]="";
 		while(Token[i] != NULL)	
 		{
 			strcat(out,Token[i]);
@@ -246,6 +247,7 @@ int Handle_ls(char **Token)
 
 }
 
+
 char *ReadFileLine(char *Filename, char *search)
 {
 	static char out[128];
@@ -337,6 +339,154 @@ int Handle_pinfo(char **Token)
 
 }
 
+void Handle_childSIG(int Sig)
+{
+    pid_t childpid;
+    int childstatus;
+    while ((childpid = waitpid( -1, &childstatus, WNOHANG)) > 0)
+    {
+        if (WIFEXITED(childstatus))
+        {
+            printf("\nPID %d exited normally.\n", childpid);
+        }
+        else
+        {
+            if (WIFSTOPPED(childstatus))
+            {
+                printf("\nPID %d was stopped by %d\n", childpid, WSTOPSIG(childstatus));
+            }
+            else
+            {
+                if (WIFSIGNALED(childstatus))
+                {
+                    printf("\nPID %d exited due to signal %d\n", childpid, WTERMSIG(childstatus));
+                }
+                else
+                {
+                    perror("\nERROR in waitpid");
+                }
+            }
+        }
+    }
+}
+
+int strtoint(char input[])
+{
+
+	int i=0, num;
+	while(input[i]!='\0')
+	{
+		num *= 10;
+		int temp = input[i] - '0';
+		num += temp;
+		i++;
+	}
+	return num;
+}
+
+int check_numsec(char **Token)
+{
+	int ct = 0;
+	char numstr[32];
+	while(Token[ct]!=NULL)
+		ct++;
+	int i = 0;
+	while(Token[i] != NULL && (strcmp(Token[i],"-n") != 0))
+		i++;
+
+	if(ct != i)
+		return i;
+	else
+		return -1;
+}
+
+char **getCPUlist(char *line)
+{
+	char *field, **CPUlist;
+	int Ind = 0;
+	CPUlist = malloc(32 * sizeof(char*));
+
+	field = strtok(line, " ");
+	CPUlist[Ind++] = field;
+	while((field = strtok(NULL, " ")) != NULL)
+	{
+		CPUlist[Ind++] = field;
+	}
+	CPUlist[Ind++] = NULL;
+	int len = strlen(CPUlist[Ind-2]);
+	CPUlist[Ind-2][len-1] = '\0';
+	return CPUlist;
+}
+
+int Recur_interrupt(char **Token)
+{
+	
+}
+
+int Handle_n_interrupt(char **Token, int sec)
+{
+	FILE * fd;
+	char * line = NULL;
+	size_t len = 0;
+	ssize_t read;
+	int  i = 0;
+	fd = fopen("/proc/interrupts", "r");
+	if (fd == NULL)
+		perror("fopen");
+	read = getline(&line, &len, fd);
+
+	char **CPUlist = getCPUlist(line);
+	while(CPUlist[i]!=NULL)
+		printf("%s\t",CPUlist[i++]);
+	printf("\n");
+
+//	printf("number of CPU = %d\n", i-1);
+
+	// while((read = getline(&line, &len, fd)) != -1)
+	// {
+	// 	if(strstr(line, search))
+	// 	{
+	// 		strcpy(out, line);
+	// 		break;
+	// 	}
+
+	// }
+	// fclose(fd);
+	// if(line)
+	// 	free(line);
+	//return out;
+
+}
+
+int Handle_nightswatch(char **Token)
+{
+	int ct = 0, num_sec, flag = 0;
+	char numstr[32];
+
+	flag = check_numsec(Token);
+
+	if(flag != -1)
+	{		
+		num_sec = strtoint(Token[flag+1]);
+	}
+	else
+		num_sec = 2;
+
+	while(Token[ct]!=NULL)
+		ct++;
+	if(strcmp(Token[ct-1],"interrupt") == 0)
+	{
+		Handle_n_interrupt(Token,num_sec);
+	}
+	else if(strcmp(Token[ct-1],"dirty") == 0)
+	{
+
+	}
+//	printf("Number of sec = %d\n", num_sec);
+
+	return 0;
+}
+
 int systemcommand(char **Token)
 {
 	int ct = 0, status;
@@ -345,6 +495,7 @@ int systemcommand(char **Token)
 		ct++;
 	if(strcmp(Token[ct-1],"&") != 0)
 	{
+		signal(SIGCHLD, Handle_childSIG);
 		pid = fork();
 		if(pid == 0)
 		{
@@ -352,6 +503,7 @@ int systemcommand(char **Token)
 			{
 				perror("EXECVP ERROR");
 			}
+			exit(1);
 		}
 		else if (pid < 0)
 		{
@@ -359,16 +511,32 @@ int systemcommand(char **Token)
 		}
 		else
 		{
-			do 
-			{
-	      		wpid = waitpid(pid, &status, WUNTRACED);
-	    	}while (!WIFEXITED(status) && !WIFSIGNALED(status));
+	     	wpid = waitpid(pid, &status, WUNTRACED);
 		}
 	}
 	else
 	{
-
-	}
+		Token[ct - 1] = NULL;
+		pid = fork();
+		if(pid == 0)
+		{
+			fclose(stdin); 
+			fopen("/dev/null", "r"); 
+			if(execvp(Token[0], Token) == -1)
+			{
+				perror("EXECVP ERROR");
+			}
+			exit(1);
+		}
+		else if (pid < 0)
+		{
+			perror("FORK ERROR");
+		}
+		else
+		{
+			printf("Child process in Background\n");
+		}
+	}	
 	return 0;
 }
 
@@ -390,11 +558,42 @@ int Execute(char **Token)
 	{
 		if(strcmp(Token[0],"ls") == 0)
 		{
-			int ret = Handle_ls(Token);
+		 	int ct = 0, ret;
+		 	while(Token[ct]!= NULL)
+		 		ct++;
+		 	if(strcmp(Token[ct-1],"&") != 0)
+		 	{
+		 		ret = Handle_ls(Token);
+		 	}
+		 	else
+		 	{
+		 		Token[ct -1] = NULL;
+		 		signal(SIGCHLD, Handle_childSIG);
+				pid_t pid = fork();
+				if(pid == 0)
+				{
+					fclose(stdin); 
+					fopen("/dev/null", "r"); 
+					Handle_ls(Token);
+					exit(1);
+				}
+				else if (pid < 0)
+				{
+					perror("FORK ERROR");
+				}
+				else
+				{
+					printf("Child process in Background\n");
+				}
+		 	}
 		}
 		else if(strcmp(Token[0],"pinfo") == 0)
 		{
 			Handle_pinfo(Token);
+		}
+		else if(strcmp(Token[0],"nightswatch") == 0)
+		{
+			Handle_nightswatch(Token);
 		}
 		else
 		{
@@ -433,6 +632,8 @@ int main_loop()
 		printf("> ");
 		Inp = GetInput();
 		Tok = TokenizeInp(Inp);
+		if(strlen(Tok[0]) == 0)
+			continue;
 		ret = Execute(Tok);
 		
 		free(Tok);
