@@ -22,6 +22,7 @@
 #define	WHITE	7
 
 char *BuiltIn[] = { "cd", "pwd", "echo", "exit"};
+int prevInt[16];
 
 char *GetInput()
 {
@@ -63,24 +64,24 @@ char *GetPermissionString(struct stat perm)
 
 	if(S_ISDIR(perm.st_mode))
 		PermissionString[0] = 'd';
-	 if(perm.st_mode & S_IRUSR)
-	 	PermissionString[1] = 'r';
-	 if(perm.st_mode & S_IWUSR)
-	 	PermissionString[2] = 'w';
-	 if(perm.st_mode & S_IXUSR)
-	 	PermissionString[3] = 'x';
-	 if(perm.st_mode & S_IRGRP)
-	 	PermissionString[4] = 'r';
-	 if(perm.st_mode & S_IWGRP)
-	 	PermissionString[5] = 'w';
-	 if(perm.st_mode & S_IXGRP)
-	 	PermissionString[6] = 'x';
-	 if(perm.st_mode & S_IROTH)
-	 	PermissionString[7] = 'r';
-	 if(perm.st_mode & S_IWOTH)
-	 	PermissionString[8] = 'w';
-	 if(perm.st_mode & S_IXOTH)
-	    PermissionString[9] = 'x';
+	if(perm.st_mode & S_IRUSR)
+		PermissionString[1] = 'r';
+	if(perm.st_mode & S_IWUSR)
+		PermissionString[2] = 'w';
+	if(perm.st_mode & S_IXUSR)
+		PermissionString[3] = 'x';
+	if(perm.st_mode & S_IRGRP)
+		PermissionString[4] = 'r';
+	if(perm.st_mode & S_IWGRP)
+		PermissionString[5] = 'w';
+	if(perm.st_mode & S_IXGRP)
+		PermissionString[6] = 'x';
+	if(perm.st_mode & S_IROTH)
+		PermissionString[7] = 'r';
+	if(perm.st_mode & S_IWOTH)
+		PermissionString[8] = 'w';
+	if(perm.st_mode & S_IXOTH)
+		PermissionString[9] = 'x';
 	return PermissionString;
 
 }
@@ -373,7 +374,7 @@ void Handle_childSIG(int Sig)
 int strtoint(char input[])
 {
 
-	int i=0, num;
+	int i=0, num=0;
 	while(input[i]!='\0')
 	{
 		num *= 10;
@@ -418,9 +419,50 @@ char **getCPUlist(char *line)
 	return CPUlist;
 }
 
-int Recur_interrupt(char **Token)
+int Recur_interrupt(char **Token, int CPUnum, int sec)
 {
-	
+	int  k = 0;
+	while(k<sec)
+	{
+		k++;
+		FILE * fd;
+		char * line = NULL;
+		size_t len = 0;
+		ssize_t read;
+		int  i = 0;
+		fd = fopen("/proc/interrupts", "r");
+		if (fd == NULL)
+			perror("fopen");
+		read = getline(&line, &len, fd);
+		while((read = getline(&line, &len, fd)) != -1)
+		{
+		 	if(strstr(line, "i8042") && strstr(line, "1:"))
+		 	{
+		 		char **param = getCPUlist(line);
+		 		int j = 0;
+		 		for(j=0; j<CPUnum; j++)
+		 		{
+			 		int num = strtoint(param[1+j]);
+			 		if(prevInt[j] == 0)
+			 		{
+			 			prevInt[j] = num;
+			 		}
+			 		else
+			 		{
+			 			printf("%d\t", num - prevInt[j]);
+			 			prevInt[j] = num;
+			 		}
+				}
+				printf("\n");
+				free(param);
+				break;
+			}
+		}
+
+		fclose(fd);
+		sleep(sec);
+	}
+	return 0;
 }
 
 int Handle_n_interrupt(char **Token, int sec)
@@ -429,33 +471,43 @@ int Handle_n_interrupt(char **Token, int sec)
 	char * line = NULL;
 	size_t len = 0;
 	ssize_t read;
-	int  i = 0;
+	int  i = 0, status;
 	fd = fopen("/proc/interrupts", "r");
 	if (fd == NULL)
 		perror("fopen");
 	read = getline(&line, &len, fd);
 
+	fclose(fd);
 	char **CPUlist = getCPUlist(line);
 	while(CPUlist[i]!=NULL)
 		printf("%s\t",CPUlist[i++]);
 	printf("\n");
-
-//	printf("number of CPU = %d\n", i-1);
-
-	// while((read = getline(&line, &len, fd)) != -1)
-	// {
-	// 	if(strstr(line, search))
-	// 	{
-	// 		strcpy(out, line);
-	// 		break;
-	// 	}
-
-	// }
-	// fclose(fd);
-	// if(line)
-	// 	free(line);
-	//return out;
-
+	free(CPUlist);
+	int  k = 0;
+	for(k=0;k<16;k++)
+		prevInt[k] = 0;
+	k=0;
+//	while(k < 5)
+//	{
+	k++;
+	pid_t pid, wpid;
+	pid = fork();
+	if(pid == 0)
+	{
+		fclose(stdin); 
+		fopen("/dev/null", "r"); 
+		Recur_interrupt(Token, i-1, sec);
+		exit(1);
+	}
+	else if (pid < 0)
+	{
+		perror("FORK ERROR");
+	}
+	else
+	{
+		wpid = waitpid(pid, &status, WUNTRACED);
+	}
+//	}
 }
 
 int Handle_nightswatch(char **Token)
@@ -482,8 +534,6 @@ int Handle_nightswatch(char **Token)
 	{
 
 	}
-//	printf("Number of sec = %d\n", num_sec);
-
 	return 0;
 }
 
@@ -520,8 +570,15 @@ int systemcommand(char **Token)
 		pid = fork();
 		if(pid == 0)
 		{
+			FILE *fd;
 			fclose(stdin); 
-			fopen("/dev/null", "r"); 
+			fd = fopen("/dev/null", "r"); 
+			if(strcmp(Token[0],"vim") == 0)
+			{
+				fopen(STDIN_FILENO, "w");
+				fclose(fd);
+			}
+
 			if(execvp(Token[0], Token) == -1)
 			{
 				perror("EXECVP ERROR");
