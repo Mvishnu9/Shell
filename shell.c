@@ -11,6 +11,9 @@
 #include <time.h>
 #include <math.h>
 #include <sys/wait.h>
+#include <termios.h>
+#include <ctype.h>
+#include <sys/select.h>
 
 #define RESET	0
 #define BRIGHT 	1
@@ -23,13 +26,15 @@
 
 char *BuiltIn[] = { "cd", "pwd", "echo", "exit"};
 int prevInt[16];
+struct termios saved_attributes;
+
 
 char *GetInput()
 {
-	char *read = NULL;
+	char *rd = NULL;
 	ssize_t siz = 0;
-	getline(&read, &siz, stdin);
-	return read;
+	getline(&rd, &siz, stdin);
+	return rd;
 }
 
 char *formatdate(char* str, time_t val)
@@ -255,11 +260,11 @@ char *ReadFileLine(char *Filename, char *search)
 	FILE * fd;
 	char * line = NULL;
 	size_t len = 0;
-	ssize_t read;
+	ssize_t rd;
 	fd = fopen(Filename, "r");
 	if (fd == NULL)
 		perror("Error");
-	while((read = getline(&line, &len, fd)) != -1)
+	while((rd = getline(&line, &len, fd)) != -1)
 	{
 		if(strstr(line, search))
 		{
@@ -419,22 +424,36 @@ char **getCPUlist(char *line)
 	return CPUlist;
 }
 
+int inputAvailable()  
+{
+  struct timeval tv;
+  fd_set fds;
+  tv.tv_sec = 0;
+  tv.tv_usec = 0;
+  FD_ZERO(&fds);
+  FD_SET(STDIN_FILENO, &fds);
+  select(STDIN_FILENO+1, &fds, NULL, NULL, &tv);
+  return (FD_ISSET(0, &fds));
+}
+
 int Recur_interrupt(char **Token, int CPUnum, int sec)
 {
 	int  k = 0;
-	while(k<sec)
+	char c;
+	
+	while(1)
 	{
 		k++;
 		FILE * fd;
 		char * line = NULL;
 		size_t len = 0;
-		ssize_t read;
+		ssize_t rd;
 		int  i = 0;
 		fd = fopen("/proc/interrupts", "r");
 		if (fd == NULL)
 			perror("fopen");
-		read = getline(&line, &len, fd);
-		while((read = getline(&line, &len, fd)) != -1)
+		rd = getline(&line, &len, fd);
+		while((rd = getline(&line, &len, fd)) != -1)
 		{
 		 	if(strstr(line, "i8042") && strstr(line, "1:"))
 		 	{
@@ -460,9 +479,60 @@ int Recur_interrupt(char **Token, int CPUnum, int sec)
 		}
 
 		fclose(fd);
-		sleep(sec);
+
+		long timctr = 0;
+
+
+		long max = (long)sec*1000;
+		int flag = 0;
+		while(timctr < max)
+		{
+			timctr++;
+			usleep(1000);
+			c = '/';
+			if(inputAvailable())
+				read(STDIN_FILENO, &c, 1);
+			if( c=='q')
+			{
+				printf("Quitting Process...\n");
+				flag = 1;
+				break;
+			}
+		}
+		if(flag == 1)
+			break;
 	}
 	return 0;
+}
+
+
+void reset_input_mode()
+{
+	tcsetattr (STDIN_FILENO, TCSANOW, &saved_attributes);
+}
+
+void set_input_mode()
+{
+	struct termios tattr;
+	char *name;
+
+/* Make sure stdin is a terminal. */
+	if (!isatty (STDIN_FILENO))
+	{
+		fprintf (stderr, "Not a terminal.\n");
+		exit (EXIT_FAILURE);
+	}
+
+/* Save the terminal attributes so we can restore them later. */
+	tcgetattr (STDIN_FILENO, &saved_attributes);
+	atexit (reset_input_mode);
+
+/* Set the funny terminal modes. */
+	tcgetattr (STDIN_FILENO, &tattr);
+	tattr.c_lflag &= ~(ICANON | ECHO);	/* Clear ICANON and ECHO. */
+	tattr.c_cc[VMIN] = 1;
+	tattr.c_cc[VTIME] = 0;
+	tcsetattr (STDIN_FILENO, TCSAFLUSH, &tattr);
 }
 
 int Handle_n_interrupt(char **Token, int sec)
@@ -470,12 +540,12 @@ int Handle_n_interrupt(char **Token, int sec)
 	FILE * fd;
 	char * line = NULL;
 	size_t len = 0;
-	ssize_t read;
+	ssize_t rd;
 	int  i = 0, status;
 	fd = fopen("/proc/interrupts", "r");
 	if (fd == NULL)
 		perror("fopen");
-	read = getline(&line, &len, fd);
+	rd = getline(&line, &len, fd);
 
 	fclose(fd);
 	char **CPUlist = getCPUlist(line);
@@ -486,16 +556,12 @@ int Handle_n_interrupt(char **Token, int sec)
 	int  k = 0;
 	for(k=0;k<16;k++)
 		prevInt[k] = 0;
-	k=0;
-//	while(k < 5)
-//	{
-	k++;
+	char c, password[10000];
+	set_input_mode ();
 	pid_t pid, wpid;
 	pid = fork();
 	if(pid == 0)
 	{
-		fclose(stdin); 
-		fopen("/dev/null", "r"); 
 		Recur_interrupt(Token, i-1, sec);
 		exit(1);
 	}
@@ -507,7 +573,7 @@ int Handle_n_interrupt(char **Token, int sec)
 	{
 		wpid = waitpid(pid, &status, WUNTRACED);
 	}
-//	}
+	reset_input_mode();
 }
 
 int Handle_nightswatch(char **Token)
