@@ -29,6 +29,33 @@ int prevInt[16];
 struct termios saved_attributes;
 
 
+void reset_input_mode()
+{
+	tcsetattr (STDIN_FILENO, TCSANOW, &saved_attributes);
+}
+
+void set_input_mode()
+{
+	struct termios tattr;
+	char *name;
+
+/* Make sure stdin is a terminal. */
+	if (!isatty (STDIN_FILENO))
+	{
+		fprintf (stderr, "Not a terminal.\n");
+		exit (EXIT_FAILURE);
+	}
+
+	tcgetattr (STDIN_FILENO, &saved_attributes);
+	atexit (reset_input_mode);
+
+	tcgetattr (STDIN_FILENO, &tattr);
+	tattr.c_lflag &= ~(ICANON | ECHO);	
+	tattr.c_cc[VMIN] = 1;
+	tattr.c_cc[VTIME] = 0;
+	tcsetattr (STDIN_FILENO, TCSAFLUSH, &tattr);
+}
+
 char *GetInput()
 {
 	char *rd = NULL;
@@ -436,14 +463,12 @@ int inputAvailable()
   return (FD_ISSET(0, &fds));
 }
 
-int Recur_interrupt(char **Token, int CPUnum, int sec)
+int Recur_interrupt(int CPUnum, int sec)
 {
-	int  k = 0;
 	char c;
 	
 	while(1)
 	{
-		k++;
 		FILE * fd;
 		char * line = NULL;
 		size_t len = 0;
@@ -481,8 +506,6 @@ int Recur_interrupt(char **Token, int CPUnum, int sec)
 		fclose(fd);
 
 		long timctr = 0;
-
-
 		long max = (long)sec*1000;
 		int flag = 0;
 		while(timctr < max)
@@ -503,36 +526,6 @@ int Recur_interrupt(char **Token, int CPUnum, int sec)
 			break;
 	}
 	return 0;
-}
-
-
-void reset_input_mode()
-{
-	tcsetattr (STDIN_FILENO, TCSANOW, &saved_attributes);
-}
-
-void set_input_mode()
-{
-	struct termios tattr;
-	char *name;
-
-/* Make sure stdin is a terminal. */
-	if (!isatty (STDIN_FILENO))
-	{
-		fprintf (stderr, "Not a terminal.\n");
-		exit (EXIT_FAILURE);
-	}
-
-/* Save the terminal attributes so we can restore them later. */
-	tcgetattr (STDIN_FILENO, &saved_attributes);
-	atexit (reset_input_mode);
-
-/* Set the funny terminal modes. */
-	tcgetattr (STDIN_FILENO, &tattr);
-	tattr.c_lflag &= ~(ICANON | ECHO);	/* Clear ICANON and ECHO. */
-	tattr.c_cc[VMIN] = 1;
-	tattr.c_cc[VTIME] = 0;
-	tcsetattr (STDIN_FILENO, TCSAFLUSH, &tattr);
 }
 
 int Handle_n_interrupt(char **Token, int sec)
@@ -556,13 +549,12 @@ int Handle_n_interrupt(char **Token, int sec)
 	int  k = 0;
 	for(k=0;k<16;k++)
 		prevInt[k] = 0;
-	char c, password[10000];
 	set_input_mode ();
 	pid_t pid, wpid;
 	pid = fork();
 	if(pid == 0)
 	{
-		Recur_interrupt(Token, i-1, sec);
+		Recur_interrupt(i-1, sec);
 		exit(1);
 	}
 	else if (pid < 0)
@@ -574,6 +566,73 @@ int Handle_n_interrupt(char **Token, int sec)
 		wpid = waitpid(pid, &status, WUNTRACED);
 	}
 	reset_input_mode();
+}
+
+int Recur_dirty(char **Token, int sec)
+{
+	char c;
+	while(1)
+	{
+		FILE * fd;
+		char * line = NULL;
+		size_t len = 0;
+		ssize_t rd;
+		int  i = 0;
+		fd = fopen("/proc/meminfo", "r");
+		if (fd == NULL)
+			perror("fopen");
+
+		while((rd = getline(&line, &len, fd)) != -1)
+		{
+		 	if(strstr(line, "Dirty:"))
+		 	{
+		 		char **param = getCPUlist(line);
+			 	printf("%s kB\n", param[1]);
+				free(param);
+				break;
+			}
+		}
+		fclose(fd);
+		long timctr = 0;
+		long max = (long)sec*1000;
+		int flag = 0;
+		while(timctr < max)
+		{
+			timctr++;
+			usleep(1000);
+			c = '/';
+			if(inputAvailable())
+				read(STDIN_FILENO, &c, 1);
+			if( c=='q')
+			{
+				printf("Quitting Process...\n");
+				flag = 1;
+				break;
+			}
+		}
+		if(flag == 1)
+			break;
+	}
+	return 0;
+}
+
+int Handle_n_dirty( char **Token, int sec)
+{
+	pid_t pid, wpid;
+	int status;
+	set_input_mode();
+	pid = fork();
+	if(pid == 0)
+	{
+		Recur_dirty(Token,sec);
+		exit(1);
+	}
+	else if(pid < 0)
+		perror("FORK ERROR");
+	else
+		wpid = waitpid(pid, &status, WUNTRACED);
+	reset_input_mode();
+
 }
 
 int Handle_nightswatch(char **Token)
@@ -598,7 +657,7 @@ int Handle_nightswatch(char **Token)
 	}
 	else if(strcmp(Token[ct-1],"dirty") == 0)
 	{
-
+		Handle_n_dirty(Token, num_sec);
 	}
 	return 0;
 }
