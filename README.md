@@ -22,7 +22,7 @@ Defaults to Process info of current process without user defined PID.
 ```
 nightswatch -n [time-interval] [interrupt/dirty]
 ```
-_interrupt_  displays number of keyboard interrupts in gaps of the specified time interval.
+_interrupt_  displays number of keyboard interrupts in gaps of the specified time interval.<br/>
 _dirty_ displays size of dirty memory in gaps of the specified time interval.
 Press 'q' to quit.
 
