@@ -34,9 +34,9 @@ Background Processes can be started by using ```&``` at the end of a command.
 
 ## Compilation
 ```
-gcc shell.c -lm
+make
 ```
 ## Running the shell
 ```
-./a.out
+./shell
 ```
